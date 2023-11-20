@@ -1,0 +1,145 @@
+language: "de"
+intents:
+  TimerStart:
+    data:
+      #All times
+      - sentences:
+          - "[<timer_kannst_du>] [einen] timer für <timer_slot_stunden> [und] <timer_slot_minuten> [und] <timer_slot_sekunden> <timer_setzen>"
+      #Only hour(s)
+      - sentences:
+          - "[<timer_kannst_du>] [einen] timer für <timer_slot_stunden> <timer_setzen>"
+          - "<erinnere> {reminder} in <timer_slot_stunden>"
+        slots:
+          seconds: 0
+          minutes: 0
+      #Only minute(s)
+      - sentences:
+          - "[<timer_kannst_du>] [einen] timer für <timer_slot_minuten> <timer_setzen>"
+          - "<erinnere> {reminder} in <timer_slot_minuten>"
+          - "<bescheid_start> <timer_slot_minuten> <bescheid_ende> {reminder}"
+        slots:
+          seconds: 0
+          hours: 0
+      #Only seconds
+      - sentences:
+          - "[<timer_kannst_du>] [einen] timer für <timer_slot_sekunden> <timer_setzen>"
+          - "[<timer_setzen>] timer für <timer_slot_sekunden>"
+          - "<erinnere> {reminder} in <timer_slot_sekunden>"
+          - "<bescheid_start> <timer_slot_sekunden> <bescheid_ende> {reminder}"
+        slots:
+          minutes: 0
+          hours: 0
+      #No hour, only minutes and seconds
+      - sentences:
+          - "[<timer_kannst_du>] [einen] timer für {minutes} <timer_minute> [und] {seconds} <timer_sekunde> <timer_setzen>"
+          - "<erinnere> {reminder} in <timer_slot_minuten> und <timer_slot_sekunden>"
+        slots:
+          hours: 0
+      #No seconds, only hours and minutes
+      - sentences:
+          - "[<timer_kannst_du>] [einen] timer für <timer_slot_stunden> [und] {minutes} <timer_minute> <timer_setzen>"
+          - "<erinnere> {reminder} in <timer_slot_stunden> und <timer_slot_minuten>"
+        slots:
+          seconds: 0
+      #Halves
+      #Minutes
+      - sentences:
+          - "[<timer_kannst_du>] [einen] timer für {minutes}[ ]einhalb <timer_minute> <timer_setzen>"
+        slots:
+          hours: 0
+          seconds: 30
+      #Hours
+      - sentences:
+          - "[<timer_kannst_du>] [einen] timer für {hours}[ ](einhalb|,5) <timer_stunde> <timer_setzen>"
+        slots:
+          minutes: 30
+          seconds: 0
+
+lists:
+  reminder:
+    wildcard: true
+  seconds:
+    range:
+      from: 0
+      to: 120
+  minutes:
+    range:
+      from: 0
+      to: 120
+  hours:
+    range:
+      from: 0
+      to: 24
+  advertised_timer_values:
+    values:
+      - in: eine
+        out: 1
+      - in: einer
+        out: 1
+      - in: zwei
+        out: 2
+      - in: drei
+        out: 3
+      - in: vier
+        out: 4
+      - in: fünf
+        out: 5
+      - in: sechs
+        out: 6
+      - in: sieben
+        out: 7
+      - in: acht
+        out: 8
+      - in: neun
+        out: 9
+      - in: "null"
+        out: 0
+
+expansion_rules:
+  timer_kannst_du: "(könntest|kannst|würdest) du"
+  timer_stunde: "stunde[n]"
+  timer_minute: "minute[n]"
+  timer_sekunde: "sekunde[n]"
+  timer_setzen: "(starten|setzen|setz[e] [einen])"
+  erinnere: "erinner[e] mich an"
+  bescheid_start: "sag mir in"
+  bescheid_ende: "bescheid das"
+  timer_slot_stunden: "({advertised_timer_values:hours}|{hours}) <timer_stunde>"
+  timer_slot_minuten: "({advertised_timer_values:minutes}|{minutes}) <timer_minute>"
+  timer_slot_sekunden: "({advertised_timer_values:seconds}|{seconds}) <timer_sekunde>"
+
+responses:
+  intents:
+    TimerStart:
+      default: >
+        {% set mapper = {
+          "eine": 1,
+          "einer": 1,
+          "zwei": 2,
+          "drei": 3,
+          "vier": 4,
+          "fünf": 5,
+          "sechs": 6,
+          "sieben": 7,
+          "acht": 8,
+          "neun": 9,
+          "null": 0
+        } %}
+        {% set hours = (mapper[slots.hours] | default(slots.hours)) | int(default=0) %}
+        {% set minutes = (mapper[slots.minutes] | default(slots.minutes)) | int(default=0) %}
+        {% set seconds = (mapper[slots.seconds] | default(slots.seconds)) | int(default=0) %}
+
+        {% set hours_speech = ('eine' if hours == 1 else hours | string) + ' stunde' + ('n' if hours > 1 else '') %}
+        {% set minutes_speech = ('eine' if minutes == 1 else minutes | string) + ' minute' + ('n' if minutes > 1 else '') %}
+        {% set seconds_speech = ('eine' if seconds == 1 else seconds | string) + ' sekunde' + ('n' if seconds > 1 else '') %}
+        {% set start = ["Kein problem. ", "Natürlich. ", "Logo. ", ""] | random %}
+        {% set wrap_start = ["Timer gestartet für ", "Timer startet für ", "Timer aktiviert für ", "Timer für "] %}
+        {% set wrap_end = ["", "", "", [" aktiviert", " gestartet"] | random] %}
+        {% set suffix = ["", " Du Lauch!"] | random %}
+        {% set idx_wrap = range(wrap_start | length) | random %}
+        {% set hours_str = hours_speech if hours > 0 %}
+        {% set minutes_divider = '' if (hours * minutes) == 0 else (', ' if seconds > 0 else ' und ') %}
+        {% set minutes_str = minutes_speech if minutes > 0 %}
+        {% set seconds_divider = '' if (hours == 0 and minutes == 0 or seconds == 0) else ' und ' %}
+        {% set seconds_str = seconds_speech if seconds > 0 %}
+        {{ "{}{}{}{}{}{}{}{}.{}".format(start, wrap_start[idx_wrap], hours_str, minutes_divider, minutes_str, seconds_divider, seconds_str, wrap_end[idx_wrap], suffix) }}

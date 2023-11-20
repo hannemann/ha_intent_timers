@@ -1,0 +1,134 @@
+timer:
+  va_timer1:
+  va_timer2:
+  va_timer3:
+
+input_text:
+  va_timer1:
+    name: Timer 1 Reminder
+    initial: ""
+  va_timer2:
+    name: Timer 2 Reminder
+    initial: ""
+  va_timer3:
+    name: Timer 3 Reminder
+    initial: ""
+
+automation:
+  - id: 70f8afa6-0e95-4eca-b1b7-29fd1334ec06
+    alias: Voice Assistant Timer Finished
+    trigger:
+      - platform: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.va_timer1
+      - platform: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.va_timer2
+      - platform: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.va_timer3
+    variables:
+      text_entity: "input_text.{{ trigger.event.data.entity_id.split('.')[1] }}"
+      reminder_prefix: "Erinnerung an:"
+      text: "{{ states(text_entity) }}"
+      message: "{{ reminder_prefix }} {{ text }}"
+      language: de_DE
+      voice: de_DE-thorsten-high
+      alarm: "{{ ['dädüüü!', 'düüüüt!', 'piiiep!', 'nähk!', 'miep!', 'düdelüüt!', 'törööö!', 'bing!'] | random }}"
+    action:
+      - if:
+          - condition: template
+            value_template: "{{ text != '' }}"
+        then:
+          service: media_player.play_media
+          target:
+            entity_id: media_player.vlc_telnet
+          data:
+            media_content_id: >-
+              media-source://tts/tts.piper?message={{ message }}&language={{ language }}&voice={{ voice }}
+            media_content_type: provider
+        else:
+          repeat:
+            count: 10
+            sequence:
+              - service: media_player.play_media
+                target:
+                  entity_id: media_player.vlc_telnet
+                data:
+                  media_content_id: >-
+                    media-source://tts/tts.piper?message={{ alarm }}&language={{ language }}&voice={{ voice }}
+                  media_content_type: provider
+              - delay: 1
+      - service: input_text.set_value
+        target:
+          entity_id: "{{ text_entity }}"
+        data:
+          value: ""
+
+script:
+  set_timer_start:
+    variables:
+      entity: >
+        {% if states('timer.va_timer1') != 'active' and states('timer.va_timer1') != 'paused' %}
+          va_timer1
+        {% elif states('timer.va_timer2') != 'active' and states('timer.va_timer2') != 'paused' %}
+          va_timer2
+        {% else %}
+          va_timer3
+        {% endif%}
+    sequence:
+      - service: input_text.set_value
+        target:
+          entity_id: "input_text.{{ entity }}"
+        data:
+          value: "{{ reminder }}"
+      - service: timer.start
+        data:
+          duration: "{{ hours | default(0) }}:{{ minutes | default(0) }}:{{ seconds | default(0) }}"
+        target:
+          entity_id: "timer.{{ entity }}"
+
+intent_script:
+  TimerStart:
+    action:
+      - service: script.set_timer_start
+        data:
+          hours: "{{ hours | default(0) | int(0) }}"
+          minutes: "{{ minutes | default(0) | int(0) }}"
+          seconds: "{{ seconds | default(0) | int(0) }}"
+          reminder: "{{ reminder if reminder is defined else '' }}"
+
+  TimerStop:
+    async_action: true
+    action:
+      - delay:
+          seconds: 10
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ states(entity_id) == 'active' }}"
+              - condition: template
+                value_template: "{{ entity_id != 'all' }}"
+            sequence:
+              - service: timer.cancel
+                target:
+                  entity_id: "{{ entity_id }}"
+          - conditions:
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ (states.timer|selectattr('state','eq','active')|list|length == 1 and entity_id == 'null') }}"
+                  - condition: template
+                    value_template: "{{ entity_id == 'all' and states.timer|selectattr('state','eq','active')|list|length > 0 }}"
+            sequence:
+              - service: timer.cancel
+                target:
+                  entity_id: "{{ states.timer | selectattr('state','eq','active') | map(attribute='entity_id') | join(', ') }}"
+
+  TimerDuration:
+    async_action: true
+    action:
+      - stop: ""
